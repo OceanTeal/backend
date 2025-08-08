@@ -210,6 +210,7 @@ export const fetchMemberDetails = async (mId, startDate, endDate) => {
     };
 };
 
+
 export const addActivity = async (memberId, activityData) => {
     const member = await memberModel.findOne({ memberId: memberId });
     if (!member) {
@@ -250,7 +251,7 @@ export const addActivity = async (memberId, activityData) => {
                 date: existingActivity.date,
                 type: existingActivity.type,
                 hours: existingActivity.hours,
-                tags: existingActivity.tags
+                tags: existingActivity.tags,
             };
         }
     }
@@ -272,6 +273,5 @@ export const addActivity = async (memberId, activityData) => {
         type: newActivity.type,
         hours: newActivity.hours,
         tags: newActivity.tags,
-        created: true
     };
 };
