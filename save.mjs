@@ -3,8 +3,8 @@ import teamModel from "../models/teamSchema.mjs"
 import memberModel from "../models/memberSchema.mjs"
 import activityModel from "../models/activitySchema.mjs"
 
-const aggregateActivitiesByType =(activities)=>{
-    const activityMap = activities.reduce((acc, act) =>{
+const aggregateActivitiesByType = (activities) => {
+    const activityMap = activities.reduce((acc, act) => {
         acc[act.type] = (acc[act.type] || 0) + act.hours
         return acc
     }, {})
@@ -14,14 +14,14 @@ const aggregateActivitiesByType =(activities)=>{
         .sort((a, b) => b.totalHours - a.totalHours)
 }
 
-const getUniqueTags = (activities)=>{
+const getUniqueTags = (activities) => {
     return [...new Set(
         activities.flatMap(act => act.tags || [])
     )]
 }
 
-export const fetchOverview = async(startDate, endDate)=>{
-    const [totalCompanies, totalTeams, totalMembers, totalActivities,activities] = await Promise.all([
+export const fetchOverview = async (startDate, endDate) => {
+    const [totalCompanies, totalTeams, totalMembers, totalActivities, activities] = await Promise.all([
         companyModel.countDocuments(),
         teamModel.countDocuments(),
         memberModel.countDocuments(),
@@ -29,15 +29,16 @@ export const fetchOverview = async(startDate, endDate)=>{
         activityModel.find({}, 'type hours date')
     ])
 
-    const filteredActivities = activities.filter(activity=>{
-        if(!startDate && !endDate) return true
+    const filteredActivities = activities.filter(activity => {
+        if (!startDate && !endDate) return true
+        
         const activityDate = activity.date.toISOString().split('T')[0]
         
-        if(startDate && endDate){
+        if (startDate && endDate) {
             return activityDate >= startDate && activityDate <= endDate
-        }else if (startDate){
+        } else if (startDate) {
             return activityDate >= startDate
-        }else if (endDate){
+        } else if (endDate) {
             return activityDate <= endDate
         }
         return true
@@ -46,7 +47,7 @@ export const fetchOverview = async(startDate, endDate)=>{
     const totalHours = filteredActivities.reduce((sum, a) => sum + a.hours, 0)
     const topActivityTypes = aggregateActivitiesByType(filteredActivities)
     
-    return{
+    return {
         totalCompanies,
         totalTeams,
         totalMembers,
@@ -56,32 +57,32 @@ export const fetchOverview = async(startDate, endDate)=>{
     }
 }
 
-export const fetchCompanyDetails = async(cId, startDate, endDate) =>{
-    const company = await companyModel.findOne({companyId: cId})
-    if(!company){
+export const fetchCompanyDetails = async (cId, startDate, endDate) => {
+    const company = await companyModel.findOne({ companyId: cId })
+    if (!company) {
         throw new Error('Company not found')
     }
     
-    const teams = await teamModel.find({company: company._id})
+    const teams = await teamModel.find({ company: company._id })
     
-    const teamSummaries = await Promise.all(teams.map(async (team) =>{
-        const members = await memberModel.find({team: team._id})
+    const teamSummaries = await Promise.all(teams.map(async (team) => {
+        const members = await memberModel.find({ team: team._id })
         const memberIds = members.map(m => m._id)
         
         const allActivities = await activityModel.find({ 
-            member: {$in: memberIds} 
+            member: { $in: memberIds } 
         })
 
-        const filteredActivities = allActivities.filter(activity =>{
+        const filteredActivities = allActivities.filter(activity => {
             if (!startDate && !endDate) return true
             
             const activityDate = activity.date.toISOString().split('T')[0]
             
-            if (startDate && endDate){
+            if (startDate && endDate) {
                 return activityDate >= startDate && activityDate <= endDate
-            } else if (startDate){
+            } else if (startDate) {
                 return activityDate >= startDate
-            } else if (endDate){
+            } else if (endDate) {
                 return activityDate <= endDate
             }
             return true
@@ -91,7 +92,7 @@ export const fetchCompanyDetails = async(cId, startDate, endDate) =>{
         const activityBreakdown = aggregateActivitiesByType(filteredActivities)
         const uniqueTags = getUniqueTags(filteredActivities)
 
-        return{
+        return {
             teamId: team.teamId,
             teamName: team.tName,
             totalMembers: members.length,
@@ -102,33 +103,33 @@ export const fetchCompanyDetails = async(cId, startDate, endDate) =>{
     }))
 
     const allMemberIds = []
-    for (const team of teams){
-        const members = await memberModel.find({team: team._id})
+    for (const team of teams) {
+        const members = await memberModel.find({ team: team._id })
         allMemberIds.push(...members.map(m => m._id))
     }
 
     const allCompanyActivities = await activityModel.find({
-        member: {$in: allMemberIds}
+        member: { $in: allMemberIds }
     })
 
-    const filteredCompanyActivities = allCompanyActivities.filter(activity =>{
+    const filteredCompanyActivities = allCompanyActivities.filter(activity => {
         if (!startDate && !endDate) return true
         
         const activityDate = activity.date.toISOString().split('T')[0]
         
-        if (startDate && endDate){
+        if (startDate && endDate) {
             return activityDate >= startDate && activityDate <= endDate
-        } else if (startDate){
+        } else if (startDate) {
             return activityDate >= startDate
-        } else if (endDate){
+        } else if (endDate) {
             return activityDate <= endDate
         }
         return true
     })
 
-    const activitySummaryByType = filteredCompanyActivities.reduce((acc, act) =>{
-        if (!acc[act.type]){
-            acc[act.type] = {totalHours: 0, members: new Set()}
+    const activitySummaryByType = filteredCompanyActivities.reduce((acc, act) => {
+        if (!acc[act.type]) {
+            acc[act.type] = { totalHours: 0, members: new Set() }
         }
         acc[act.type].totalHours += act.hours
         acc[act.type].members.add(act.member.toString())
@@ -139,7 +140,7 @@ export const fetchCompanyDetails = async(cId, startDate, endDate) =>{
         activitySummaryByType[type].members = activitySummaryByType[type].members.size
     })
 
-    return{
+    return {
         companyId: company.companyId,
         companyName: company.cName,
         teams: teamSummaries,
@@ -149,31 +150,31 @@ export const fetchCompanyDetails = async(cId, startDate, endDate) =>{
 
 export const fetchMemberDetails = async (mId, startDate, endDate) => {
     const member = await memberModel.findOne({memberId: mId})
-    if (!member){
+    if (!member) {
         throw new Error('Member not found')
     }
     const activities = await activityModel.find({member: member._id})
     
-    const filteredActivities = activities.filter(activity =>{
+    const filteredActivities = activities.filter(activity => {
         if (!startDate && !endDate) return true
         
         const activityDate = activity.date.toISOString().split('T')[0]
         
-        if (startDate && endDate){
+        if (startDate && endDate) {
             return activityDate >= startDate && activityDate <= endDate
-        } else if (startDate){
+        } else if (startDate) {
             return activityDate >= startDate
-        } else if (endDate){
+        } else if (endDate) {
             return activityDate <= endDate
         }
         return true
     })
     
-    const dailyBreakdown = filteredActivities.reduce((acc, act) =>{
+    const dailyBreakdown = filteredActivities.reduce((acc, act) => {
         const dateKey = act.date.toISOString().split("T")[0]
         
-        if (!acc[dateKey]){
-            acc[dateKey] ={
+        if (!acc[dateKey]) {
+            acc[dateKey] = {
                 date: dateKey,
                 activities: [],
                 hours: 0
@@ -193,9 +194,9 @@ export const fetchMemberDetails = async (mId, startDate, endDate) => {
     }
 }
 
-export const addActivity = async (memberId, activityData) =>{
-    const member = await memberModel.findOne({memberId: memberId})
-    if (!member){
+export const addActivity = async (memberId, activityData) => {
+    const member = await memberModel.findOne({ memberId: memberId })
+    if (!member) {
         throw new Error('Member not found')
     }
     
@@ -203,36 +204,36 @@ export const addActivity = async (memberId, activityData) =>{
         ? activityData.tags 
         : (activityData.tags ? [activityData.tags] : [])
     
-    const activities = await activityModel.find({
+    const existingActivity = await activityModel.findOne({
         member: member._id,
         type: activityData.type
-    });
-    const newDateOnly = new Date(activityData.date).toISOString().split('T')[0];
+    })
 
-    const existingActivity = activities.find(act =>{
-
-        const existingDateOnly = act.date.toISOString().split('T')[0];
-        return existingDateOnly === newDateOnly;
-    });
-
-    if (existingActivity){
-        existingActivity.hours += activityData.hours;
-
-        if (normalizedTags.length > 0){
-            const existingTags = existingActivity.tags || [];
-            const newTags = normalizedTags.filter(tag => !existingTags.includes(tag));
-            existingActivity.tags = [...existingTags, ...newTags];
+    
+    if (existingActivity) {
+        const existingDate = existingActivity.date.toISOString().split('T')[0]
+        console.log(existingDate)
+        const newDate = new Date(activityData.date).toISOString().split('T')[0]
+        console.log(newDate)
+        
+        if (existingDate === newDate) {
+            existingActivity.hours += activityData.hours            
+            if (normalizedTags.length > 0) {
+                const existingTags = existingActivity.tags || []
+                const newTags = normalizedTags.filter(tag => !existingTags.includes(tag))
+                existingActivity.tags = [...existingTags, ...newTags]
+            }            
+            await existingActivity.save()
+            
+            return {
+                memberId: memberId,
+                date: existingActivity.date,
+                type: existingActivity.type,
+                hours: existingActivity.hours,
+                tags: existingActivity.tags,
+            }
         }
-
-        await existingActivity.save();
-        return{
-            memberId,
-            date: existingActivity.date,
-            type: existingActivity.type,
-            hours: existingActivity.hours,
-            tags: existingActivity.tags
-        };
-    }  
+    }    
     
     const newActivity = new activityModel({
         member: member._id,
@@ -243,7 +244,7 @@ export const addActivity = async (memberId, activityData) =>{
     })
 
     await newActivity.save()    
-    return{
+    return {
         memberId: memberId,
         date: newActivity.date,
         type: newActivity.type,

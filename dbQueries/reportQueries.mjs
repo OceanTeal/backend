@@ -1,277 +1,255 @@
-import companyModel from "../models/companySchema.mjs";
-import teamModel from "../models/teamSchema.mjs";
-import memberModel from "../models/memberSchema.mjs";
-import activityModel from "../models/activitySchema.mjs";
+import companyModel from "../models/companySchema.mjs"
+import teamModel from "../models/teamSchema.mjs"
+import memberModel from "../models/memberSchema.mjs"
+import activityModel from "../models/activitySchema.mjs"
 
-const aggregateActivitiesByType = (activities) => {
-    const activityMap = activities.reduce((acc, act) => {
-        acc[act.type] = (acc[act.type] || 0) + act.hours;
-        return acc;
-    }, {});
+const aggregateActivitiesByType =(activities)=>{
+    const activityMap = activities.reduce((acc, act) =>{
+        acc[act.type] = (acc[act.type] || 0) + act.hours
+        return acc
+    }, {})
     
     return Object.entries(activityMap)
-        .map(([type, totalHours]) => ({ type, totalHours }))
-        .sort((a, b) => b.totalHours - a.totalHours);
-};
+        .map(([type, totalHours]) => ({type, totalHours}))
+        .sort((a, b) => b.totalHours - a.totalHours)
+}
 
-const getUniqueTags = (activities) => {
+const getUniqueTags = (activities)=>{
     return [...new Set(
         activities.flatMap(act => act.tags || [])
-    )];
-};
+    )]
+}
 
-export const fetchOverview = async (startDate, endDate) => {
-    const [totalCompanies, totalTeams, totalMembers, totalActivities, activities] = await Promise.all([
+export const fetchOverview = async(startDate, endDate)=>{
+    const [totalCompanies, totalTeams, totalMembers, totalActivities,activities] = await Promise.all([
         companyModel.countDocuments(),
         teamModel.countDocuments(),
         memberModel.countDocuments(),
         activityModel.countDocuments(),
         activityModel.find({}, 'type hours date')
-    ]);
+    ])
 
-    // Filter activities by date using filter()
-    const filteredActivities = activities.filter(activity => {
-        if (!startDate && !endDate) return true;
+    const filteredActivities = activities.filter(activity=>{
+        if(!startDate && !endDate) return true
+        const activityDate = activity.date.toISOString().split('T')[0]
         
-        const activityDate = activity.date.toISOString().split('T')[0];
-        
-        if (startDate && endDate) {
-            return activityDate >= startDate && activityDate <= endDate;
-        } else if (startDate) {
-            return activityDate >= startDate;
-        } else if (endDate) {
-            return activityDate <= endDate;
+        if(startDate && endDate){
+            return activityDate >= startDate && activityDate <= endDate
+        }else if (startDate){
+            return activityDate >= startDate
+        }else if (endDate){
+            return activityDate <= endDate
         }
-        return true;
-    });
+        return true
+    })
 
-    // Using reduce to calculate total hours
-    const totalHours = filteredActivities.reduce((sum, a) => sum + a.hours, 0);
-    const topActivityTypes = aggregateActivitiesByType(filteredActivities);
+    const totalHours = filteredActivities.reduce((sum, a) => sum + a.hours, 0)
+    const topActivityTypes = aggregateActivitiesByType(filteredActivities)
     
-    return {
+    return{
         totalCompanies,
         totalTeams,
         totalMembers,
         totalActivities: filteredActivities.length,
         totalHours,
         topActivityTypes,
-    };
-};
+    }
+}
 
-export const fetchCompanyDetails = async (cId, startDate, endDate) => {
-    const company = await companyModel.findOne({ companyId: cId });
-    if (!company) {
-        throw new Error('Company not found');
+export const fetchCompanyDetails = async(cId, startDate, endDate) =>{
+    const company = await companyModel.findOne({companyId: cId})
+    if(!company){
+        throw new Error('Company not found')
     }
     
-    const teams = await teamModel.find({ company: company._id });
+    const teams = await teamModel.find({company: company._id})
     
-    // Using map to transform teams data
-    const teamSummaries = await Promise.all(teams.map(async (team) => {
-        const members = await memberModel.find({ team: team._id });
-        const memberIds = members.map(m => m._id);
+    const teamSummaries = await Promise.all(teams.map(async (team) =>{
+        const members = await memberModel.find({team: team._id})
+        const memberIds = members.map(m => m._id)
         
-        // Get all activities for all members in one query
         const allActivities = await activityModel.find({ 
-            member: { $in: memberIds } 
-        });
+            member: {$in: memberIds} 
+        })
 
-        // Filter activities by date using filter()
-        const filteredActivities = allActivities.filter(activity => {
-            if (!startDate && !endDate) return true;
+        const filteredActivities = allActivities.filter(activity =>{
+            if (!startDate && !endDate) return true
             
-            const activityDate = activity.date.toISOString().split('T')[0];
+            const activityDate = activity.date.toISOString().split('T')[0]
             
-            if (startDate && endDate) {
-                return activityDate >= startDate && activityDate <= endDate;
-            } else if (startDate) {
-                return activityDate >= startDate;
-            } else if (endDate) {
-                return activityDate <= endDate;
+            if (startDate && endDate){
+                return activityDate >= startDate && activityDate <= endDate
+            } else if (startDate){
+                return activityDate >= startDate
+            } else if (endDate){
+                return activityDate <= endDate
             }
-            return true;
-        });
+            return true
+        })
 
-        // Using reduce for total hours
-        const totalHours = filteredActivities.reduce((sum, a) => sum + a.hours, 0);
-        const activityBreakdown = aggregateActivitiesByType(filteredActivities);
-        const uniqueTags = getUniqueTags(filteredActivities);
+        const totalHours = filteredActivities.reduce((sum, a) => sum + a.hours, 0)
+        const activityBreakdown = aggregateActivitiesByType(filteredActivities)
+        const uniqueTags = getUniqueTags(filteredActivities)
 
-        return {
+        return{
             teamId: team.teamId,
             teamName: team.tName,
             totalMembers: members.length,
             totalHours,
             activityBreakdown,
             uniqueTags,
-        };
-    }));
+        }
+    }))
 
-    // Calculate company-wide activity summary by type
-    // Get all member IDs from all teams
-    const allMemberIds = [];
-    for (const team of teams) {
-        const members = await memberModel.find({ team: team._id });
-        allMemberIds.push(...members.map(m => m._id));
+    const allMemberIds = []
+    for (const team of teams){
+        const members = await memberModel.find({team: team._id})
+        allMemberIds.push(...members.map(m => m._id))
     }
 
     const allCompanyActivities = await activityModel.find({
-        member: { $in: allMemberIds }
-    });
+        member: {$in: allMemberIds}
+    })
 
-    // Filter company activities by date using filter()
-    const filteredCompanyActivities = allCompanyActivities.filter(activity => {
-        if (!startDate && !endDate) return true;
+    const filteredCompanyActivities = allCompanyActivities.filter(activity =>{
+        if (!startDate && !endDate) return true
         
-        const activityDate = activity.date.toISOString().split('T')[0];
+        const activityDate = activity.date.toISOString().split('T')[0]
         
-        if (startDate && endDate) {
-            return activityDate >= startDate && activityDate <= endDate;
-        } else if (startDate) {
-            return activityDate >= startDate;
-        } else if (endDate) {
-            return activityDate <= endDate;
+        if (startDate && endDate){
+            return activityDate >= startDate && activityDate <= endDate
+        } else if (startDate){
+            return activityDate >= startDate
+        } else if (endDate){
+            return activityDate <= endDate
         }
-        return true;
-    });
+        return true
+    })
 
-    const activitySummaryByType = filteredCompanyActivities.reduce((acc, act) => {
-        if (!acc[act.type]) {
-            acc[act.type] = { totalHours: 0, members: new Set() };
+    const activitySummaryByType = filteredCompanyActivities.reduce((acc, act) =>{
+        if (!acc[act.type]){
+            acc[act.type] = {totalHours: 0, members: new Set()}
         }
-        acc[act.type].totalHours += act.hours;
-        acc[act.type].members.add(act.member.toString());
-        return acc;
-    }, {});
+        acc[act.type].totalHours += act.hours
+        acc[act.type].members.add(act.member.toString())
+        return acc
+    }, {})
 
-    // Convert Set to count for each activity type
     Object.keys(activitySummaryByType).forEach(type => {
-        activitySummaryByType[type].members = activitySummaryByType[type].members.size;
-    });
+        activitySummaryByType[type].members = activitySummaryByType[type].members.size
+    })
 
-    return {
+    return{
         companyId: company.companyId,
         companyName: company.cName,
         teams: teamSummaries,
         activitySummaryByType,
-    };
-};
+    }
+}
 
 export const fetchMemberDetails = async (mId, startDate, endDate) => {
-    const member = await memberModel.findOne({memberId: mId});
-    if (!member) {
-        throw new Error('Member not found');
+    const member = await memberModel.findOne({memberId: mId})
+    if (!member){
+        throw new Error('Member not found')
     }
-
-    const activities = await activityModel.find({ member: member._id });
+    const activities = await activityModel.find({member: member._id})
     
-    // Filter activities by date using filter()
-    const filteredActivities = activities.filter(activity => {
-        if (!startDate && !endDate) return true;
+    const filteredActivities = activities.filter(activity =>{
+        if (!startDate && !endDate) return true
         
-        const activityDate = activity.date.toISOString().split('T')[0];
+        const activityDate = activity.date.toISOString().split('T')[0]
         
-        if (startDate && endDate) {
-            return activityDate >= startDate && activityDate <= endDate;
-        } else if (startDate) {
-            return activityDate >= startDate;
-        } else if (endDate) {
-            return activityDate <= endDate;
+        if (startDate && endDate){
+            return activityDate >= startDate && activityDate <= endDate
+        } else if (startDate){
+            return activityDate >= startDate
+        } else if (endDate){
+            return activityDate <= endDate
         }
-        return true;
-    });
+        return true
+    })
     
-    // Using reduce to group activities by date
-    const dailyBreakdown = filteredActivities.reduce((acc, act) => {
-        const dateKey = act.date.toISOString().split("T")[0];
+    const dailyBreakdown = filteredActivities.reduce((acc, act) =>{
+        const dateKey = act.date.toISOString().split("T")[0]
         
-        if (!acc[dateKey]) {
-            acc[dateKey] = {
+        if (!acc[dateKey]){
+            acc[dateKey] ={
                 date: dateKey,
                 activities: [],
                 hours: 0
-            };
-        }
-        
-        acc[dateKey].activities.push(act.type);
-        acc[dateKey].hours += act.hours;
-        return acc;
-    }, {});
+            }
+        }        
+        acc[dateKey].activities.push(act.type)
+        acc[dateKey].hours += act.hours
+        return acc
+    }, {})
 
-    // Using reduce for total hours
-    const totalHours = filteredActivities.reduce((sum, a) => sum + a.hours, 0);
-
+    const totalHours = filteredActivities.reduce((sum, a) => sum + a.hours, 0)
     return {
         memberId: member.mId,
         name: member.mName,
         totalHours,
         dailyBreakdown: Object.values(dailyBreakdown)
-    };
-};
-
-
-export const addActivity = async (memberId, activityData) => {
-    const member = await memberModel.findOne({ memberId: memberId });
-    if (!member) {
-        throw new Error('Member not found');
     }
+}
 
-    // Normalize tags - convert string to array if needed
+export const addActivity = async (memberId, activityData) =>{
+    const member = await memberModel.findOne({memberId: memberId})
+    if (!member){
+        throw new Error('Member not found')
+    }
+    
     const normalizedTags = Array.isArray(activityData.tags) 
         ? activityData.tags 
-        : (activityData.tags ? [activityData.tags] : []);
-
-    // Check if activity with same type, date, and member already exists
-    const existingActivity = await activityModel.findOne({
+        : (activityData.tags ? [activityData.tags] : [])
+    
+    const activities = await activityModel.find({
         member: member._id,
         type: activityData.type
     });
+    const newDateOnly = new Date(activityData.date).toISOString().split('T')[0];
 
-    // If found, check if it's the same date using string comparison
-    if (existingActivity) {
-        const existingDate = existingActivity.date.toISOString().split('T')[0];
-        const newDate = new Date(activityData.date).toISOString().split('T')[0];
-        
-        if (existingDate === newDate) {
-            // Update existing activity by adding hours
-            existingActivity.hours += activityData.hours;
-            
-            // Merge tags if provided
-            if (normalizedTags.length > 0) {
-                const existingTags = existingActivity.tags || [];
-                const newTags = normalizedTags.filter(tag => !existingTags.includes(tag));
-                existingActivity.tags = [...existingTags, ...newTags];
-            }
-            
-            await existingActivity.save();
-            
-            return {
-                memberId: memberId,
-                date: existingActivity.date,
-                type: existingActivity.type,
-                hours: existingActivity.hours,
-                tags: existingActivity.tags,
-            };
+    const existingActivity = activities.find(act =>{
+
+        const existingDateOnly = act.date.toISOString().split('T')[0];
+        return existingDateOnly === newDateOnly;
+    });
+
+    if (existingActivity){
+        existingActivity.hours += activityData.hours;
+
+        if (normalizedTags.length > 0){
+            const existingTags = existingActivity.tags || [];
+            const newTags = normalizedTags.filter(tag => !existingTags.includes(tag));
+            existingActivity.tags = [...existingTags, ...newTags];
         }
-    }
+
+        await existingActivity.save();
+        return{
+            updated: true,
+            memberId,
+            date: existingActivity.date,
+            type: existingActivity.type,
+            hours: existingActivity.hours,
+            tags: existingActivity.tags
+        };
+    }  
     
-    // Create new activity (either no existing activity or different date)
     const newActivity = new activityModel({
         member: member._id,
         date: new Date(activityData.date),
         type: activityData.type,
         hours: activityData.hours,
         tags: normalizedTags
-    });
+    })
 
-    await newActivity.save();
-    
-    return {
+    await newActivity.save()    
+    return{
+        updated: false,
         memberId: memberId,
         date: newActivity.date,
         type: newActivity.type,
         hours: newActivity.hours,
         tags: newActivity.tags,
-    };
-};
+    }
+}
